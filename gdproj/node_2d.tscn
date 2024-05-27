@@ -1,9 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://cepbv34mbgsxj"]
-
-[ext_resource type="Script" path="res://TestPlayer.gd" id="1_pg1wt"]
-
-[node name="Node2D" type="Node2D"]
-script = ExtResource("1_pg1wt")
-
-[node name="Player" type="Player" parent="."]
-unique_name_in_owner = true
