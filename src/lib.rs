@@ -173,7 +173,7 @@ impl PsdDataExport {
         }
 
         // ドキュメント全体のレイヤー等名の重複チェック
-        if Self::get_export_option_value(export_options, "append_suffix_by_order", &false) {
+        if Self::get_export_option_value(export_options, "append_suffix_by_order", false) {
             let mut doc_member_names : std::collections::HashSet<String> = std::collections::HashSet::new();
             for group in groups.iter() {
                 let group_name_string : String = group.name().to_string();
@@ -245,10 +245,10 @@ impl PsdDataExport {
             let layer_image = image::imageops::crop(&mut img, layer_x, layer_y, layer_width, layer_height);
             let extension = GString::to_string(&self.image_extension);
             let export_image_path =
-                if Self::get_export_option_value(export_options, "append_suffix_by_order", &false) { 
-                    (&export_dir_path).join(layer_name + "_" + &(format!("{:0>4}", i.to_string())) + "." + GString::to_string(&self.image_extension).as_str())
+                if Self::get_export_option_value(export_options, "append_suffix_by_order", false) { 
+                    export_dir_path.join(layer_name + "_" + &(format!("{:0>4}", i.to_string())) + "." + GString::to_string(&self.image_extension).as_str())
                 } else { 
-                    (&export_dir_path).join(layer_name + "." + GString::to_string(&self.image_extension).as_str())
+                    export_dir_path.join(layer_name + "." + GString::to_string(&self.image_extension).as_str())
                 };
 
             match &*extension {
@@ -302,8 +302,10 @@ impl PsdDataExport {
         }
     }
 
-    fn get_export_option_value<T>(export_options : &Dictionary, key_str : &str, default : &T) -> T where T : ToGodot + FromGodot + Clone {
-        export_options.get(StringName::from(key_str)).unwrap_or(Variant::from(default.clone())).try_to().unwrap_or(default.clone())
+    fn get_export_option_value<T>(export_options : &Dictionary, key_str : &str, default : T) -> T where T : ToGodot + FromGodot {
+        let Some(option_value_variant) = export_options.get(StringName::from(key_str)) else { return default };
+
+        option_value_variant.try_to().unwrap_or(default)
     }
 }
 
@@ -396,10 +398,11 @@ struct LibEntry;
 unsafe impl ExtensionLibrary for LibEntry {
     fn min_level() -> InitLevel { InitLevel::Core }
 
+    #[allow(clippy::single_match)] // 将来的にInitLevel::Core以外のInitLevel::Coreで何かする可能性を考慮している
     fn on_level_init(level: InitLevel){
         match level {
-            InitLevel::Core => {init_panic_hook()},
-            _ => {}
+            InitLevel::Core => { init_panic_hook(); }, // FIXME: ちゃんと効いてるかわからない 多分効いてない
+            _ => {} // 何もしない
         }
     }
 }
