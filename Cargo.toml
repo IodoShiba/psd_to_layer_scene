@@ -19,6 +19,9 @@ serde_json = "1.0"
 libwebp-image = { version = "0.3.0", features = ["libwebp-0_6"] }
 libwebp = { version = "0.1.2", features = ["0_6"] }
 
+[patch.crates-io]
+psd = { git = "https://github.com/IodoShiba/psd.git", branch = "fix-rgba-idx" }
+
 [lib]
 crate-type = ["cdylib"]
 
