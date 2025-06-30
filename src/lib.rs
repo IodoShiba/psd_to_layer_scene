@@ -11,9 +11,8 @@ use std::io::{BufWriter};
 use std::ffi::OsStr;
 use std::num::TryFromIntError;
 use image::error::{EncodingError, ImageFormatHint};
-use image::{GenericImageView, ImageError, RgbaImage};
+use image::{ImageError, RgbaImage};
 use psd::{Psd, PsdGroup, PsdLayer};
-use image::imageops::crop;
 
 #[derive(GodotClass)]
 #[class(tool, init, base = Node)]
@@ -274,33 +273,13 @@ impl PsdDataExport {
             let layer_name: String = layer.name().to_string();
             let psd_width: u32 = psd.width();
             let psd_height: u32 = psd.height();
-            // let layer_width: u32 = layer.width().into();
-            // let layer_height: u32 = layer.height().into();
-            let layer_x: i32 = layer.layer_left();
-            let layer_y: i32 = layer.layer_top();
 
-            godot_print!("Layer {}: ({}, {}) {}x{}", i, layer_x, layer_y, layer.width(), layer.height());
-
-            let layer_rect = (layer_x, layer.layer_right(), layer_y, layer.layer_bottom());
-            let (layer_x_doc, right, layer_y_doc, bottom) = confine_rect(layer_rect, (psd_width, psd_height));
+            let (layer_x_doc, right, layer_y_doc, bottom) = confine_rect((layer.layer_left(), layer.layer_right(), layer.layer_top(), layer.layer_bottom()), (psd_width, psd_height));
             let (layer_width, layer_height) = urect_size((layer_x_doc, right, layer_y_doc, bottom));
 
-            godot_print!("Layer {}: ({}, {}) {}x{}", i, layer_x_doc, layer_y_doc, layer_width, layer_height);
-
-            // レイヤーから保存する画像情報を構成する
-            // RgbaImage::from_raw は、画像の幅、高さ、バッファを受け取り、バッファのサイズが十分に大きい場合にImageBufferをただ構築する
-
-            godot_print!("Layer {}: {}x{} buf size: {}", i, layer.width(), layer.height(), layer.rgba().len());
             let mut img = RgbaImage::from_raw(psd_width, psd_height, layer.rgba()).unwrap();
             // PSD全体からレイヤー部分のみクロップする
-            // FIXME: 内容がキャンバスの横方向に左右ともに飛び出ているレイヤーを含むpsdファイルを変換した際に、意図しない位置を切り抜いてしまう
-            // キャンバスの右端の位置から切り抜くが、途中でレイヤーの右端の切り抜かれるべき部分が左側に付いたように出力される
-
-            // cropは画像のViewを返す 元の画像のサイズを参照して境界からはみ出ないように切り抜いてくれる
-            // ここでは参照される画像のサイズはImageBuffer::dimensions() else { 0u32 };
             let layer_image = image::imageops::crop(&mut img, layer_x_doc, layer_y_doc, layer_width, layer_height);
-            // let layer_image = img.view(0, 0, img.width(), img.height());
-
             let extension = GString::to_string(&self.image_extension);
             let export_image_path =
                 if Self::get_export_option_value(export_options, "append_suffix_by_order", false) { 
@@ -391,12 +370,6 @@ fn confine_one_dimension(value : i32, limit : u32) -> u32 {
 
 fn urect_size((left, right, top, bottom) : (u32, u32, u32, u32)) -> (u32, u32) {
     (right - left + 1, bottom - top + 1)
-}
-
-fn rect_size((left, right, top, bottom) : (i32, i32, i32, i32)) -> (u32, u32) {
-    let width = if right >= left { right - left + 1 } else { 0 };
-    let height = if bottom >= top { bottom - top + 1 } else { 0 };
-    (width as u32, height as u32)
 }
 
 pub fn init_panic_hook() {
