@@ -1,6 +1,7 @@
 // use gdnative::api::{Directory, File};
 use godot::prelude::*;
 use serde::{Deserialize, Serialize};
+use core::panic;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::fs::{self};
@@ -8,12 +9,13 @@ use std::fs::{File};
 use std::io::Write;
 use std::io::{BufWriter};
 use std::ffi::OsStr;
+use std::num::TryFromIntError;
 use image::error::{EncodingError, ImageFormatHint};
 use image::{ImageError, RgbaImage};
 use psd::{Psd, PsdGroup, PsdLayer};
 
 #[derive(GodotClass)]
-#[class(init, base = Node)]
+#[class(tool, init, base = Node)]
 struct PsdDataExport {
     #[export]
     psd_dir: GString,
@@ -27,8 +29,6 @@ struct PsdDataExport {
     image_extension: GString,
     #[export]
     quality_factor: f32,
-
-    base: Base<Node>, 
 }
 
 // // NOTE: #[derive(GodotClass)] で #[class(init)] が指定されているとinit()を生成するため、これに加えて手動でinit()を書くと多重定義に陥る
@@ -49,9 +49,9 @@ struct PsdDataExport {
 
 #[godot_api]
 impl PsdDataExport {
-
     #[func]
     fn execute(&self, export_options : godot::builtin::Dictionary) {
+
         let dir_path = GString::to_string(&self.psd_dir);
         let mut psd_files: Vec<String> = Vec::new();
 
@@ -134,6 +134,8 @@ impl PsdDataExport {
             //     .iter()
             //     .find(|(id, _)| *id == i)
             //     .unwrap();
+            let (left, right, top, bottom) = confine_rect((group.layer_left(), group.layer_right(), group.layer_top(), group.layer_bottom()), (psd.width(), psd.height()));
+            let (width, height) = urect_size((left, right, top, bottom));
 
             let group_model = Group {
                 id: group.id(),
@@ -141,12 +143,12 @@ impl PsdDataExport {
                 visible: group.visible(),
                 opacity: group.opacity(),
                 name: group.name().to_string(),
-                left: group.layer_left(),
-                right: group.layer_right(),
-                top: group.layer_top(),
-                bottom: group.layer_bottom(),
-                width: group.width(),
-                height: group.height(),
+                left: left as i32,
+                right: right as i32,
+                top: top as i32,
+                bottom: bottom as i32,
+                width: width.try_into().unwrap_or_else(|what : TryFromIntError| { godot_error!("u16 to u32 conversion failed: {}", what.to_string().to_godot().to_variant()); panic!() }),
+                height: height.try_into().unwrap_or_else(|what : TryFromIntError| { godot_error!("u16 to u32 conversion failed: {}", what.to_string().to_godot().to_variant()); panic!() }),
                 blending_mode: group.blend_mode() as u8,
                 // order_id: group.order_id(), // group.order_id() は存在しなくなっている
                 order_id: i32::try_from(i).unwrap(),
@@ -161,18 +163,20 @@ impl PsdDataExport {
         // layers.sort_by_key(|x1| { x1.parent_id() }); // レイヤーはpsdクレート側で既に表示順に並べられている
 
         for (i, layer) in layers.iter().enumerate() {
+            let (left, right, top, bottom) = confine_rect((layer.layer_left(), layer.layer_right(), layer.layer_top(), layer.layer_bottom()), (psd.width(), psd.height()));
+            let (width, height) = urect_size((left, right, top, bottom));
             // println!("{}", layer.name());
             let layer_model = Layer {
                 parent_id: layer.parent_id(),
                 visible: layer.visible(),
                 opacity: layer.opacity(),
                 name: layer.name().to_string(),
-                left: layer.layer_left(),
-                right: layer.layer_right(),
-                top: layer.layer_top(),
-                bottom: layer.layer_bottom(),
-                width: layer.width(),
-                height: layer.height(),
+                left: left as i32,
+                right: right as i32,
+                top: top as i32,
+                bottom: bottom as i32,
+                width: width.try_into().unwrap_or_else(|what : TryFromIntError| { godot_error!("u16 to u32 conversion failed: {}", what.to_string().to_godot().to_variant()); panic!() }),
+                height: height.try_into().unwrap_or_else(|what : TryFromIntError| { godot_error!("u16 to u32 conversion failed: {}", what.to_string().to_godot().to_variant()); panic!() }),
                 blending_mode: layer.blend_mode() as u8,
                 // order_id: layer.order_id(),
                 order_id: i32::try_from(i).unwrap(),
@@ -269,14 +273,13 @@ impl PsdDataExport {
             let layer_name: String = layer.name().to_string();
             let psd_width: u32 = psd.width();
             let psd_height: u32 = psd.height();
-            let layer_width: u32 = layer.width().into();
-            let layer_height: u32 = layer.height().into();
-            let layer_x: u32 = layer.layer_left() as u32;
-            let layer_y: u32 = layer.layer_top() as u32;
+
+            let (layer_x_doc, right, layer_y_doc, bottom) = confine_rect((layer.layer_left(), layer.layer_right(), layer.layer_top(), layer.layer_bottom()), (psd_width, psd_height));
+            let (layer_width, layer_height) = urect_size((layer_x_doc, right, layer_y_doc, bottom));
 
             let mut img = RgbaImage::from_raw(psd_width, psd_height, layer.rgba()).unwrap();
             // PSD全体からレイヤー部分のみクロップする
-            let layer_image = image::imageops::crop(&mut img, layer_x, layer_y, layer_width, layer_height);
+            let layer_image = image::imageops::crop(&mut img, layer_x_doc, layer_y_doc, layer_width, layer_height);
             let extension = GString::to_string(&self.image_extension);
             let export_image_path =
                 if Self::get_export_option_value(export_options, "append_suffix_by_order", false) { 
@@ -343,6 +346,30 @@ impl PsdDataExport {
 
         option_value_variant.try_to().unwrap_or(default)
     }
+
+}
+
+fn confine_rect((left, right, top, bottom) : (i32, i32, i32, i32), (limit_x, limit_y): (u32, u32)) -> (u32, u32, u32, u32) {
+    (
+        confine_one_dimension(left, limit_x),
+        confine_one_dimension(right, limit_x),
+        confine_one_dimension(top, limit_y),
+        confine_one_dimension(bottom, limit_y)
+    )
+}
+
+fn confine_one_dimension(value : i32, limit : u32) -> u32 {
+    if value < 0 {
+        return 0;
+    } else if value >= limit as i32 {
+        return (limit - 1) as u32;
+    } else {
+        return value as u32;
+    }
+}
+
+fn urect_size((left, right, top, bottom) : (u32, u32, u32, u32)) -> (u32, u32) {
+    (right - left + 1, bottom - top + 1)
 }
 
 pub fn init_panic_hook() {
