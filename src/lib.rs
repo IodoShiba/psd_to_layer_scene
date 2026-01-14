@@ -50,7 +50,7 @@ struct PsdDataExport {
 #[godot_api]
 impl PsdDataExport {
     #[func]
-    fn execute(&self, export_options : godot::builtin::Dictionary) {
+    fn execute(&self, export_options : godot::builtin::VarDictionary) {
 
         let dir_path = GString::to_string(&self.psd_dir);
         let mut psd_files: Vec<String> = Vec::new();
@@ -106,7 +106,7 @@ impl PsdDataExport {
         }
     }
 
-    fn export(&self, file_name: &str, export_options : &Dictionary) -> Result<(), PsdExportError> {
+    fn export(&self, file_name: &str, export_options : &VarDictionary) -> Result<(), PsdExportError> {
         godot_print!("{}", file_name);
 
         let psd_dir_path = GString::to_string(&self.psd_dir);
@@ -341,7 +341,7 @@ impl PsdDataExport {
         Ok(())
     }
 
-    fn get_export_option_value<T>(export_options : &Dictionary, key_str : &str, default : T) -> T where T : ToGodot + FromGodot {
+    fn get_export_option_value<T>(export_options : &VarDictionary, key_str : &str, default : T) -> T where T : ToGodot + FromGodot {
         let Some(option_value_variant) = export_options.get(StringName::from(key_str)) else { return default };
 
         option_value_variant.try_to().unwrap_or(default)
@@ -514,9 +514,9 @@ unsafe impl ExtensionLibrary for LibEntry {
     fn min_level() -> InitLevel { InitLevel::Core }
 
     #[allow(clippy::single_match)] // 将来的にInitLevel::Core以外のInitLevel::Coreで何かする可能性を考慮している
-    fn on_level_init(level: InitLevel){
+    fn on_stage_init(level: InitStage){
         match level {
-            InitLevel::Core => { init_panic_hook(); }, // FIXME: ちゃんと効いてるかわからない 多分効いてない
+            InitStage::Core => { init_panic_hook(); }, // FIXME: ちゃんと効いてるかわからない 多分効いてない
             _ => {} // 何もしない
         }
     }
