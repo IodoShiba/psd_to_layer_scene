@@ -1,4 +1,4 @@
-,en,ja_JP
+,en,ja
 title_label,Create PSD Layer Images To PackedScene (.tscn),PSDレイヤー画像からPackedSceneファイル(.tscn)を作成
 psd_files_label,PSD files Directory:,PSDファイルがあるディレクトリ:
 psd_layers_dir_label,Export Layer Image files Directory:,レイヤー画像を出力するディレクトリ:
