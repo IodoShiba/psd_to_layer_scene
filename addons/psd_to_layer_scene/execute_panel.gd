@@ -179,7 +179,7 @@ func _on_execute_button_pressed_inner():
 #	画像出力、JSON出力
 	psd_data_export.psd_dir = ProjectSettings.globalize_path(psd_files_dir_value.text)
 	psd_data_export.export_dir = ProjectSettings.globalize_path(psd_layers_dir_value.text)
-	psd_data_export.is_overwrite = is_overwrite_layer_check.button_pressed
+	psd_data_export.is_overwrite = is_overwrite_scene_check.button_pressed
 	psd_data_export.ignore_file_paths = ignore_file_paths
 	psd_data_export.image_extension = extension
 	if is_loss_less_check.button_pressed:
