@@ -9,7 +9,7 @@ var S
 
 var _layer_groups: Dictionary = {}
 var _root_node_2d: Node2D
-var _root_name: String
+#var _root_name: String
 var _extension:String
 var _filesystem: EditorFileSystem
 
@@ -80,7 +80,6 @@ func execute() -> int:
 	else:
 		printerr(S.tr("_cantopenpsddir"))
 #	print("対象ファイル")
-	#print(json_paths)
 	if json_paths.size() == 0:
 		print("[Skip] " + S.tr("_noimage"))
 		return -1
@@ -88,18 +87,19 @@ func execute() -> int:
 #	リソース更新後、インポート完了を待つ
 	_filesystem.scan()
 	await _filesystem.filesystem_changed
-
+	
+	var errors : Array[Error] = []
 	for json_path_v in json_paths:
 		var json_path := (json_path_v) as String
-		_root_name = json_path.get_basename().split("/")[-2]
+		var root_name = json_path.get_basename().split("/")[-2]
 
 #		上書き禁止で上書き対象ファイルがあるならスキップする
-		if not _is_overwrite and FileAccess.file_exists(_save_dir_path + _root_name.to_lower() + ".tscn"):
+		if not _is_overwrite and FileAccess.file_exists(_save_dir_path + root_name.to_lower() + ".tscn"):
 			continue
 
 #		print_debug(result)
 		_root_node_2d = PsdNode.new()
-		_root_node_2d.name = _root_name.to_upper()
+		_root_node_2d.name = root_name.to_upper()
 		
 		# ドキュメント情報の書き込み
 		if true:
@@ -138,20 +138,21 @@ func execute() -> int:
 				self.set_group_node(group)
 
 		# layer.jsonを読み取ってなんやかんやする
-		if true:
-			var file_layers_json := FileAccess.open(json_path + "layers.json", FileAccess.READ)
-			var layers_json_text: String = file_layers_json.get_as_text()
-			var json := JSON.new()
-			var layers_parse_error := json.parse(layers_json_text)
-			# var layers_parse_result: JSONParseResult = JSON.parse(layers_json_text)
-			if layers_parse_error != OK:
-				printerr(layers_parse_error)
-				printerr(error_string(layers_parse_error))
-			var layer_json_result: Array = json.data
+		var file_layers_json := FileAccess.open(json_path + "layers.json", FileAccess.READ)
+		var layers_json_text: String = file_layers_json.get_as_text()
+		var layer_json := JSON.new()
+		var layers_parse_error := layer_json.parse(layers_json_text)
+		var layer_json_result: Array
+		# var layers_parse_result: JSONParseResult = JSON.parse(layers_json_text)
+		if layers_parse_error != OK:
+			printerr(layers_parse_error)
+			printerr(error_string(layers_parse_error))
+		else:
+			layer_json_result = layer_json.data
 			layer_json_result.reverse()
 			for layer in layer_json_result:
 				# Layer Node 作成
-				self.set_layer_node(layer)
+				self.set_layer_node(layer, root_name)
 				pass
 
 		traverse_and_set_global_order(_root_node_2d)
@@ -169,12 +170,26 @@ func execute() -> int:
 #		_root_node_2d.move_child(bone_group, _root_node_2d.get_child_count() - 1)
 		# シーンを保存する
 		var scene = PackedScene.new()
-		var packed_result = scene.pack(_root_node_2d)
-		if packed_result == OK:
-			ResourceSaver.save(scene, _save_dir_path + _root_node_2d.name.to_lower() + ".tscn")
-		print("[Output] " + _save_dir_path + _root_node_2d.name.to_lower() + ".tscn")
+		var pack_result = scene.pack(_root_node_2d)
+		if pack_result != OK:
+			printerr("[Error] failed to pack scene '", root_name, "'.")
+			errors.append(pack_result)
+		else:
+			var scene_save_path := _save_dir_path + _root_node_2d.name.to_lower() + ".tscn"
+			var resource_save_error := ResourceSaver.save(scene, scene_save_path)
+			if resource_save_error != OK:
+				printerr("[Error] failed to save scene in path: '", scene_save_path, "'.")
+				errors.append(resource_save_error)
+			else:
+				print("[Output] " + _save_dir_path + _root_node_2d.name.to_lower() + ".tscn")
+
 		_root_node_2d.queue_free()
-	
+
+		if _append_suffix_by_order and layers_parse_error == OK:
+			remove_unused_textures(layer_json_result, root_name)
+
+	if errors.size() > 0:
+		return FAILED
 	return OK
 
 
@@ -203,7 +218,7 @@ func execute() -> int:
 #
 
 
-func set_layer_node(json_value: Dictionary):
+func set_layer_node(json_value: Dictionary, root_name: String):
 	var layer_node: Node2D
 	var top: float
 	var left: float
@@ -243,11 +258,13 @@ func set_layer_node(json_value: Dictionary):
 		left = json_value.left + (float(json_value.width) / 2.0)
 		parent_node.add_child(layer_node)
 
-
-	var tex_path : String = _layer_images_dir_path + "/" + _root_name + "/" + json_value.name + (("_%04d" % json_value.order_id) if _append_suffix_by_order else "") + "." + _extension
+	var tex_path : String = (
+		layer_dir_path_of_one_psd(root_name)
+		.path_join(json_value.name + order_suffix_if_enabled(json_value.order_id) + "." + _extension
+	))
 	layer_node.texture = load(tex_path)
 	layer_node.name = json_value.name
-	layer_node.visible = !json_value.visible # なぜか反転でjsonに入ってる
+	layer_node.visible = json_value.visible # なぜか反転でjsonに入ってる
 	layer_node.modulate.a = float(json_value.opacity) / 255.0
 	layer_node.position = Vector2(left, top)
 	layer_node.set_meta("order_id", json_value.order_id)
@@ -259,12 +276,38 @@ func set_group_node(json_value: Dictionary):
 	var parent_node: Node2D = get_group_node_by_id(json_value.parent_id)
 	var group_node: Node2D = Node2D.new()
 	group_node.name = json_value.name
+
+	# psd crate の不具合？に対するワークアラウンド
+	# TODO: psd crateのPSDグループの可視性の情報作成部で、CloseFolder | OpenFolder の visible を使う必要がある（かもしれない）にもかかわらず BindingSection の visible を参照している問題を修正する
+	# 当該箇所: https://github.com/chinedufn/psd/blob/28357a29414f940b6272b71831b3273f57f267bd/src/sections/layer_and_mask_information_section/mod.rs#L165-L186
 	group_node.visible = json_value.visible
 	# group_node.modulate.a = (255.0 - float(json_value.opacity)) / 255.0
 	group_node.set_meta("group_id", json_value.id)
 	group_node.set_meta("order_id", json_value.order_id)
 	parent_node.add_child(group_node)
 	# group_node.set_owner(_root_node_2d)
+
+
+func remove_unused_textures(json_value: Array, root_name: String):
+	var base_dir_path = layer_dir_path_of_one_psd(root_name)
+
+	var files_used: Dictionary[String, bool] = {}
+	for v in json_value:
+		files_used[v.name + order_suffix_if_enabled(v.order_id) + "." + _extension] = true
+	print("used: ", files_used)
+
+	var dir := DirAccess.open(base_dir_path)
+	for file_exists in dir.get_files():
+		if file_exists.get_extension() != _extension or files_used.has(file_exists):
+			continue
+
+		var file_path := base_dir_path.path_join(file_exists)
+		var err := dir.remove(file_path)
+		if err != OK:
+			printerr("[Error] failed to remove file: ", file_path)
+		else:
+			print("[Remove] unreferenced layer '", file_path, "' is removed.")
+
 
 
 func invert_group_nodes():
@@ -374,6 +417,14 @@ func node_children_sort(node: Node):
 		var child := child_v as Node
 		if child.get_child_count() > 0:
 			node_children_sort(child)
+
+
+func layer_dir_path_of_one_psd(root_name: String) -> String:
+	return _layer_images_dir_path + "/" + root_name + "/"
+
+
+func order_suffix_if_enabled(order_id: int) -> String:
+	return ("_%04d" % order_id) if _append_suffix_by_order else ""
 
 
 #	print(node.get_children())

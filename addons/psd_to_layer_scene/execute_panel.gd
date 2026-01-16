@@ -35,6 +35,7 @@ var _psd_timestamps: Dictionary = {}
 @onready var is_overwrite_layer_check: CheckBox = $IsOverwriteLayer/IsOverwriteLayerCheck
 @onready var is_overwrite_scene_check: CheckBox = $IsOverwriteScene/IsOverwriteSceneCheck
 @onready var append_suffix_by_order_check: CheckBox = $AppendSuffixScene/AppendSuffixCheck
+@onready var remove_unused_layers_check: CheckBox = $RemoveUnusedLayers/RemoveUnusedLayersCheck
 @onready var execute_button: Button = $ExecuteButton
 func init() -> void:
 	quality_factor_spin_box.value_changed.connect(_on_quality_factor_spin_box_value_changed)
@@ -66,6 +67,7 @@ func init() -> void:
 	is_overwrite_scene_check.text = S.tr("is_overwrite_scene_check")
 	is_timestamp_check.text = S.tr("is_timestamp_check")
 	append_suffix_by_order_check.text = S.tr("append_suffix_by_order")
+	remove_unused_layers_check.text = S.tr("remove_unused_layers")
 	execute_button.text = S.tr("execute_button")
 
 	_setting_load()
@@ -179,7 +181,7 @@ func _on_execute_button_pressed_inner():
 #	画像出力、JSON出力
 	psd_data_export.psd_dir = ProjectSettings.globalize_path(psd_files_dir_value.text)
 	psd_data_export.export_dir = ProjectSettings.globalize_path(psd_layers_dir_value.text)
-	psd_data_export.is_overwrite = is_overwrite_layer_check.button_pressed
+	psd_data_export.is_overwrite = is_overwrite_scene_check.button_pressed
 	psd_data_export.ignore_file_paths = ignore_file_paths
 	psd_data_export.image_extension = extension
 	if is_loss_less_check.button_pressed:
@@ -191,7 +193,10 @@ func _on_execute_button_pressed_inner():
 	result_log_label.text = S.tr("_psdtoimage")
 	print("[Start] " + S.tr("_psdtoimage"))
 	await RenderingServer.frame_post_draw
-	var option_dic : Dictionary = { &"append_suffix_by_order": append_suffix_by_order_check.button_pressed }
+	var option_dic : Dictionary = { 
+		&"append_suffix_by_order": append_suffix_by_order_check.button_pressed,
+		&"remove_unused_layer": remove_unused_layers_check.button_pressed
+	}
 	psd_data_export.execute(option_dic)
 	print("[End] " + S.tr("_psdtoimagecompleted"))
 	
@@ -199,7 +204,7 @@ func _on_execute_button_pressed_inner():
 		S,
 		psd_layers_dir_value.text,
 		export_scenes_dir_value.text,
-		is_overwrite_layer_check.button_pressed,
+		is_overwrite_scene_check.button_pressed,
 		extension,
 		filesystem,
 		option_dic

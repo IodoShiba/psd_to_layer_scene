@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://c0kmv0nf3apdq"]
 
-[ext_resource type="Script" path="res://addons/psd_to_layer_scene/execute_panel.gd" id="2"]
+[ext_resource type="Script" uid="uid://rcxvmncswlmj" path="res://addons/psd_to_layer_scene/execute_panel.gd" id="2"]
 
 [node name="ExecutePanel" type="VBoxContainer"]
 anchors_preset = 15
@@ -75,6 +75,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 item_count = 1
 popup/item_0/text = "PNG"
+popup/item_0/id = 0
 
 [node name="Toolbar" type="VBoxContainer" parent="."]
 layout_mode = 2
@@ -151,6 +152,19 @@ size_flags_horizontal = 3
 layout_mode = 2
 size_flags_horizontal = 3
 text = "append_suffix_by_order"
+flat = true
+
+[node name="RemoveUnusedLayers" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="RemoveUnusedLayers"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RemoveUnusedLayersCheck" type="CheckBox" parent="RemoveUnusedLayers"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "remove_unused_layers"
 flat = true
 
 [node name="ResultLogLabel" type="Label" parent="."]
